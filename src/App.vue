@@ -185,23 +185,23 @@ function showStatus(msg: string, duration = 2000) {
 }
 
 onMounted(() => {
-  skeletonStore.loadFromStorage();
-  animationStore.loadFromStorage();
+  const presetSkeleton = createHumanoidSkeleton();
+  skeletonStore.setSkeleton(presetSkeleton);
+  animationStore.resetAnimator();
+  showStatus('已加载人形骨架预设');
 
-  if (skeletonStore.bones.size === 0) {
-    const skeleton = createHumanoidSkeleton();
-    skeletonStore.setSkeleton(skeleton);
-    showStatus('已加载人形骨架预设');
-  }
-
-  if (animationStore.clips.size === 0) {
-    const presets = createPresetAnimations();
+  const presets = createPresetAnimations(presetSkeleton);
+  if (presets.length > 0) {
+    const existingClips = [...animationStore.allClips];
+    existingClips.forEach(clip => {
+      if (presets.some(p => p.name === clip.name)) {
+        animationStore.deleteClip(clip.id);
+      }
+    });
     presets.forEach(clip => {
       animationStore.addClip(clip);
     });
-    if (presets.length > 0) {
-      animationStore.setActiveClipId(presets[0].id);
-    }
+    animationStore.setActiveClipId(presets[0].id);
     showStatus('已加载预设动画');
   }
 

@@ -11,6 +11,17 @@ export function createBoneMesh(
   
   const direction = new THREE.Vector3().subVectors(end, start);
   const length = direction.length();
+
+  if (length < 0.001) {
+    const jointGeometry = new THREE.SphereGeometry(JOINT_RADIUS, 16, 16);
+    const jointMaterial = new THREE.MeshBasicMaterial({
+      color: isSelected ? SELECTED_BONE_COLOR : BONE_COLOR,
+    });
+    const joint = new THREE.Mesh(jointGeometry, jointMaterial);
+    joint.position.copy(start);
+    group.add(joint);
+    return group;
+  }
   
   const boneGeometry = new THREE.ConeGeometry(BONE_RADIUS, length, 8);
   const boneMaterial = new THREE.MeshBasicMaterial({

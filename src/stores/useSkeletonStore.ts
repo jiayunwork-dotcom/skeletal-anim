@@ -13,6 +13,7 @@ import { generateId } from '@/utils/math';
 
 export const useSkeletonStore = defineStore('skeleton', () => {
   const skeleton = ref<Skeleton>(createHumanoidSkeleton());
+  const skeletonVersion = ref(0);
   const selectedBoneId = ref<string | null>(null);
   const ikSolver = ref<FabrikSolver>(new FabrikSolver(skeleton.value));
   const ikEnabled = ref(false);
@@ -28,16 +29,30 @@ export const useSkeletonStore = defineStore('skeleton', () => {
     mode: 'add',
   });
 
+  function markDirty() {
+    skeletonVersion.value++;
+  }
+
   const selectedBone = computed(() => {
+    skeletonVersion.value;
     if (!selectedBoneId.value) return null;
     return skeleton.value.getBone(selectedBoneId.value) || null;
   });
 
-  const boneCount = computed(() => skeleton.value.getBoneCount());
+  const boneCount = computed(() => {
+    skeletonVersion.value;
+    return skeleton.value.getBoneCount();
+  });
 
-  const allBones = computed(() => skeleton.value.getAllBones());
+  const allBones = computed(() => {
+    skeletonVersion.value;
+    return skeleton.value.getAllBones();
+  });
 
-  const bones = computed(() => skeleton.value.bones);
+  const bones = computed(() => {
+    skeletonVersion.value;
+    return skeleton.value.bones;
+  });
 
   function setSelectedBone(boneId: string | null) {
     selectedBoneId.value = boneId;
@@ -53,6 +68,7 @@ export const useSkeletonStore = defineStore('skeleton', () => {
     skeleton.value.addBone(bone, parentId);
     selectedBoneId.value = bone.id;
     updateIkSolver();
+    markDirty();
   }
 
   function removeBone(boneId: string) {
@@ -61,24 +77,29 @@ export const useSkeletonStore = defineStore('skeleton', () => {
       selectedBoneId.value = null;
     }
     updateIkSolver();
+    markDirty();
   }
 
   function updateBoneRotation(boneId: string, rotation: THREE.Euler) {
     skeleton.value.setBoneRotation(boneId, rotation);
+    markDirty();
   }
 
   function updateBonePosition(boneId: string, position: THREE.Vector3) {
     skeleton.value.setBonePosition(boneId, position);
+    markDirty();
   }
 
   function updateBoneLength(boneId: string, length: number) {
     skeleton.value.setBoneLength(boneId, length);
+    markDirty();
   }
 
   function updateBoneName(boneId: string, name: string) {
     const bone = skeleton.value.getBone(boneId);
     if (bone) {
       bone.name = name;
+      markDirty();
     }
   }
 
@@ -87,6 +108,7 @@ export const useSkeletonStore = defineStore('skeleton', () => {
     selectedBoneId.value = null;
     updateIkSolver();
     updateWeightCalculator();
+    markDirty();
   }
 
   function setSkeleton(newSkeleton: Skeleton) {
@@ -94,6 +116,7 @@ export const useSkeletonStore = defineStore('skeleton', () => {
     selectedBoneId.value = null;
     updateIkSolver();
     updateWeightCalculator();
+    markDirty();
   }
 
   function updateIkSolver() {
@@ -122,7 +145,11 @@ export const useSkeletonStore = defineStore('skeleton', () => {
     if (!ikEnabled.value || !ikEndBoneId.value) return false;
     
     ikTarget.value.copy(targetPosition);
-    return ikSolver.value.solve(ikEndBoneId.value, targetPosition);
+    const result = ikSolver.value.solve(ikEndBoneId.value, targetPosition);
+    if (result) {
+      markDirty();
+    }
+    return result;
   }
 
   function addIkConstraint(boneId: string, minAngle: number, maxAngle: number) {
@@ -152,6 +179,7 @@ export const useSkeletonStore = defineStore('skeleton', () => {
     if (weightPainter.value) {
       weightPainter.value.setMeshData(meshData.value);
     }
+    markDirty();
   }
 
   function smoothWeights(iterations: number = 1) {
@@ -162,6 +190,7 @@ export const useSkeletonStore = defineStore('skeleton', () => {
     if (weightPainter.value) {
       weightPainter.value.setMeshData(meshData.value);
     }
+    markDirty();
   }
 
   function paintWeights(
@@ -170,7 +199,11 @@ export const useSkeletonStore = defineStore('skeleton', () => {
     meshMatrix: THREE.Matrix4
   ): number[] {
     if (!weightPainter.value) return [];
-    return weightPainter.value.paint(worldPosition, camera, meshMatrix);
+    const result = weightPainter.value.paint(worldPosition, camera, meshMatrix);
+    if (result.length > 0) {
+      markDirty();
+    }
+    return result;
   }
 
   function setWeightPaintConfig(config: Partial<WeightPaintConfig>) {
@@ -187,6 +220,7 @@ export const useSkeletonStore = defineStore('skeleton', () => {
   }
 
   function getBoneChildren(boneId: string | null): Bone[] {
+    skeletonVersion.value;
     if (!boneId) {
       const root = skeleton.value.getRootBone();
       return root ? [root] : [];
@@ -196,10 +230,12 @@ export const useSkeletonStore = defineStore('skeleton', () => {
 
   function resetPose() {
     skeleton.value.resetPose();
+    markDirty();
   }
 
   function reparentBone(boneId: string, newParentId: string | null) {
     skeleton.value.reparentBone(boneId, newParentId);
+    markDirty();
   }
 
   function toData() {

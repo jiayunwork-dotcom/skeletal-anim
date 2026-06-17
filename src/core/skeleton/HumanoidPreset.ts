@@ -91,11 +91,15 @@ const HUMANOID_ROTATION_CONSTRAINTS: Record<string, [number, number]> = {
 
 export function createHumanoidSkeleton(): Skeleton {
   const skeleton = new Skeleton({ name: 'Humanoid' });
+  const nameToId = new Map<string, string>();
 
   HUMANOID_BONE_NAMES.forEach((name) => {
+    const parentName = HUMANOID_HIERARCHY[name];
+    const parentBoneId = parentName ? nameToId.get(parentName) || null : null;
+
     const bone = new Bone({
       name,
-      parentId: HUMANOID_HIERARCHY[name],
+      parentId: parentBoneId,
       position: HUMANOID_POSITIONS[name],
       length: HUMANOID_LENGTHS[name],
       rotation: [0, 0, 0],
@@ -105,7 +109,8 @@ export function createHumanoidSkeleton(): Skeleton {
       [bone.minAngle, bone.maxAngle] = HUMANOID_ROTATION_CONSTRAINTS[name];
     }
 
-    skeleton.addBone(bone, HUMANOID_HIERARCHY[name]);
+    skeleton.addBone(bone, parentBoneId);
+    nameToId.set(name, bone.id);
   });
 
   return skeleton;

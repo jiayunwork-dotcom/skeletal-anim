@@ -17,8 +17,11 @@
           v-for="bone in rootBones"
           :key="bone.id"
           :bone="bone"
+          :depth="0"
           :selected-bone-id="selectedBoneId"
+          :expanded-bones="expandedBones"
           @select="onSelectBone"
+          @toggle="onToggleExpand"
           @add-child="onAddChildBone"
           @delete="onDeleteBone"
         />
@@ -28,17 +31,49 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue';
+import { ref, computed, watch, nextTick, onMounted } from 'vue';
+import BoneTreeNode from './BoneTreeNode.vue';
 import { useSkeleton } from '@/composables/useSkeleton';
-import type { Bone } from '@/core/skeleton/Bone';
 import * as THREE from 'three';
 
-const { allBones, selectedBoneId, selectBone, createBone, deleteBone, getChildren, skeleton } = useSkeleton();
+const { allBones, boneCount, selectedBoneId, selectBone, createBone, deleteBone, getChildren, skeleton } = useSkeleton();
 
 const rootBones = computed(() => getChildren(null));
+const expandedBones = ref<string[]>([]);
+
+function expandAll() {
+  const newList: string[] = [];
+  allBones.value.forEach((bone) => {
+    if (getChildren(bone.id).length > 0) {
+      newList.push(bone.id);
+    }
+  });
+  expandedBones.value = newList;
+}
+
+onMounted(() => {
+  nextTick(() => {
+    expandAll();
+  });
+});
+
+watch(boneCount, () => {
+  nextTick(() => {
+    expandAll();
+  });
+});
 
 function onSelectBone(boneId: string) {
   selectBone(boneId);
+}
+
+function onToggleExpand(boneId: string) {
+  const index = expandedBones.value.indexOf(boneId);
+  if (index >= 0) {
+    expandedBones.value.splice(index, 1);
+  } else {
+    expandedBones.value.push(boneId);
+  }
 }
 
 function onAddBone() {
@@ -61,6 +96,9 @@ function onAddChildBone(parentId: string) {
     const endPos = parent.getEndPosition(skeleton.value.bones);
     if (endPos) {
       createBone(parentId, endPos);
+      if (!expandedBones.value.includes(parentId)) {
+        expandedBones.value.push(parentId);
+      }
     }
   }
 }
@@ -72,162 +110,24 @@ function onDeleteBone(boneId: string) {
   }
   if (confirm('Delete this bone and all its children?')) {
     deleteBone(boneId);
+    const idx = expandedBones.value.indexOf(boneId);
+    if (idx >= 0) {
+      expandedBones.value.splice(idx, 1);
+    }
   }
 }
 </script>
 
-<script lang="ts">
-import { defineComponent, h } from 'vue';
-
-export const BoneTreeNode = defineComponent({
-  name: 'BoneTreeNode',
-  props: {
-    bone: { type: Object as () => Bone, required: true },
-    selectedBoneId: { type: String, default: null },
-    depth: { type: Number, default: 0 },
-  },
-  emits: ['select', 'add-child', 'delete'],
-  setup(props, { emit, slots }) {
-    const { getChildren } = useSkeleton();
-
-    const hasChildren = () => getChildren(props.bone.id).length > 0;
-
-    const children = () => getChildren(props.bone.id);
-
-    const onSelect = () => {
-      emit('select', props.bone.id);
-    };
-
-    const onAddChild = (e: Event) => {
-      e.stopPropagation();
-      emit('add-child', props.bone.id);
-    };
-
-    const onDelete = (e: Event) => {
-      e.stopPropagation();
-      emit('delete', props.bone.id);
-    };
-
-    return () =>
-      h('div', { class: 'bone-node' }, [
-        h(
-          'div',
-          {
-            class: ['bone-item', { selected: props.selectedBoneId === props.bone.id }],
-            style: { paddingLeft: `${props.depth * 16 + 8}px` },
-            onClick: onSelect,
-          },
-          [
-            h('span', { class: 'bone-icon' }, '🦴'),
-            h('span', { class: 'bone-name' }, props.bone.name),
-            h('div', { class: 'bone-actions' }, [
-              h(
-                'button',
-                { class: 'icon-btn', title: 'Add Child', onClick: onAddChild },
-                '➕'
-              ),
-              h(
-                'button',
-                { class: 'icon-btn', title: 'Delete', onClick: onDelete },
-                '🗑️'
-              ),
-            ]),
-          ]
-        ),
-        hasChildren()
-          ? h(
-              'div',
-              { class: 'bone-children' },
-              children().map((child: Bone) =>
-                h(BoneTreeNode, {
-                  key: child.id,
-                  bone: child,
-                  selectedBoneId: props.selectedBoneId,
-                  depth: props.depth + 1,
-                  onSelect: (id: string) => emit('select', id),
-                  onAddChild: (id: string) => emit('add-child', id),
-                  onDelete: (id: string) => emit('delete', id),
-                })
-              )
-            )
-          : null,
-      ]);
-  },
-});
-</script>
-
 <style scoped>
 .hierarchy-panel {
-  height: 280px;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
 }
 
 .bone-tree {
   display: flex;
   flex-direction: column;
-}
-
-.bone-node {
-  display: flex;
-  flex-direction: column;
-}
-
-.bone-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 8px;
-  cursor: pointer;
-  border-radius: 4px;
-  transition: background 0.15s;
-}
-
-.bone-item:hover {
-  background: rgba(74, 158, 255, 0.1);
-}
-
-.bone-item.selected {
-  background: rgba(74, 158, 255, 0.25);
-}
-
-.bone-icon {
-  font-size: 14px;
-}
-
-.bone-name {
-  flex: 1;
-  font-size: 12px;
-  color: #e0e0e0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.bone-actions {
-  display: flex;
-  gap: 2px;
-  opacity: 0;
-  transition: opacity 0.15s;
-}
-
-.bone-item:hover .bone-actions {
-  opacity: 1;
-}
-
-.icon-btn {
-  width: 20px;
-  height: 20px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: transparent;
-  border: none;
-  border-radius: 3px;
-  font-size: 11px;
-  cursor: pointer;
-  transition: background 0.15s;
-}
-
-.icon-btn:hover {
-  background: rgba(255, 255, 255, 0.1);
+  user-select: none;
 }
 </style>
