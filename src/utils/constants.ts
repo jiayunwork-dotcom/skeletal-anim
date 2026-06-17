@@ -1,0 +1,14 @@
+export const EPSILON = 1e-6;
+export const MAX_IK_ITERATIONS = 10;
+export const IK_THRESHOLD = 1e-3;
+export const DEFAULT_FPS = 30;
+export const MAX_WEIGHT_BONES = 4;
+export const WEIGHT_SIGMA = 0.5;
+export const BONE_RADIUS = 0.05;
+export const JOINT_RADIUS = 0.08;
+export const SELECTED_BONE_COLOR = 0x00d4ff;
+export const BONE_COLOR = 0xff6b6b;
+export const GRID_SIZE = 20;
+export const GRID_DIVISIONS = 20;
+export const DEFAULT_CAMERA_POSITION: [number, number, number] = [5, 5, 5];
+export const DEFAULT_CAMERA_TARGET: [number, number, number] = [0, 1, 0];
