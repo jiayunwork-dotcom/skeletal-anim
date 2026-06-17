@@ -243,6 +243,7 @@ const {
   setKeyframeInterpolationMode,
   getKeyframesForBone,
   hasKeyframeAtFrame,
+  setSelectedKeyframe,
 } = useAnimation();
 
 const { allBones, selectedBoneId, selectBone } = useSkeleton();
@@ -296,6 +297,16 @@ watch(playbackState, (state) => {
   speedValue.value = state.speed;
   looping.value = state.loop;
 }, { deep: true });
+
+watch(selectedKeyframe, (val) => {
+  selectedKeyframeFrame.value = val;
+}, { immediate: true });
+
+watch(selectedKeyframeFrame, (val) => {
+  if (val !== selectedKeyframe.value) {
+    setSelectedKeyframe(val);
+  }
+});
 
 function onClipChange() {
   if (selectedClipId.value) {

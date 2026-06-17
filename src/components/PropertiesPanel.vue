@@ -127,6 +127,12 @@
             <span class="info-value">{{ childCount }}</span>
           </div>
         </div>
+
+        <CurveEditor
+          :bone-id="selectedBone.id"
+          :selected-frame="selectedKeyframe"
+          @select-keyframe="onCurveSelectKeyframe"
+        />
       </div>
       <div v-else class="no-selection">
         <span class="no-selection-icon">👆</span>
@@ -140,9 +146,12 @@
 import { ref, computed, watch } from 'vue';
 import * as THREE from 'three';
 import { useSkeleton } from '@/composables/useSkeleton';
+import { useAnimation } from '@/composables/useAnimation';
 import { degreesToRadians, radiansToDegrees } from '@/utils/math';
+import CurveEditor from './CurveEditor.vue';
 
 const { selectedBone, allBones, updateName, updateLength, updateRotation, updatePosition, reparent, isDescendant, getChildren } = useSkeleton();
+const { selectedKeyframe, setSelectedKeyframe, goToFrame } = useAnimation();
 
 const boneName = ref('');
 const boneLength = ref(1);
@@ -219,11 +228,26 @@ function onParentChange() {
     reparent(selectedBone.value.id, parentId.value);
   }
 }
+
+function onCurveSelectKeyframe(frame: number) {
+  setSelectedKeyframe(frame);
+  goToFrame(frame);
+}
 </script>
 
 <style scoped>
 .properties-panel {
   flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.panel-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px;
+  min-height: 0;
 }
 
 .bone-properties {

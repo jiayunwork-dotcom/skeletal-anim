@@ -10,6 +10,8 @@ import { generateId } from '@/utils/math';
 import { DEFAULT_FPS } from '@/utils/constants';
 import type { AnimationClipData, KeyframeData, StateMachineData } from '@/types';
 
+export type CurvePresetType = 'linear' | 'easeIn' | 'easeOut' | 'easeInOut' | 'elastic' | 'step';
+
 export const useAnimationStore = defineStore('animation', () => {
   const skeletonStore = useSkeletonStore();
   
@@ -20,6 +22,7 @@ export const useAnimationStore = defineStore('animation', () => {
   const useStateMachine = ref(false);
   const copiedKeyframe = ref<Keyframe | null>(null);
   const selectedKeyframe = ref<number | null>(null);
+  const curveEditorSelectedKeyframes = ref<Set<number>>(new Set());
 
   function markAnimDirty() {
     animVersion.value++;
@@ -186,6 +189,7 @@ export const useAnimationStore = defineStore('animation', () => {
     if (selectedKeyframe.value === frame) {
       selectedKeyframe.value = null;
     }
+    curveEditorSelectedKeyframes.value.delete(frame);
     markAnimDirty();
   }
 
@@ -194,6 +198,10 @@ export const useAnimationStore = defineStore('animation', () => {
     currentClip.value.moveKeyframe(fromFrame, toFrame);
     if (selectedKeyframe.value === fromFrame) {
       selectedKeyframe.value = toFrame;
+    }
+    if (curveEditorSelectedKeyframes.value.has(fromFrame)) {
+      curveEditorSelectedKeyframes.value.delete(fromFrame);
+      curveEditorSelectedKeyframes.value.add(toFrame);
     }
     markAnimDirty();
   }
@@ -310,6 +318,213 @@ export const useAnimationStore = defineStore('animation', () => {
     }
   }
 
+  function setBezierHandle(
+    frame: number,
+    boneId: string,
+    handleIndex: 0 | 1,
+    newHandle: THREE.Vector3
+  ): void {
+    if (!currentClip.value) return;
+    const kf = currentClip.value.getKeyframeAt(frame);
+    if (!kf) return;
+    const handles = kf.getBezierHandles(boneId);
+    handles[handleIndex] = newHandle.clone();
+    kf.setBezierHandles(boneId, handles);
+    kf.interpolation = 'bezier';
+    markAnimDirty();
+  }
+
+  function getBezierHandles(
+    frame: number,
+    boneId: string
+  ): [THREE.Vector3, THREE.Vector3] | null {
+    if (!currentClip.value) return null;
+    const kf = currentClip.value.getKeyframeAt(frame);
+    if (!kf) return null;
+    const h = kf.getBezierHandles(boneId);
+    return [h[0].clone(), h[1].clone()];
+  }
+
+  function applyCurvePreset(
+    frame: number,
+    boneId: string,
+    preset: CurvePresetType
+  ): void {
+    if (!currentClip.value) return;
+    const kf = currentClip.value.getKeyframeAt(frame);
+    if (!kf) return;
+
+    let inHandle: THREE.Vector3;
+    let outHandle: THREE.Vector3;
+
+    switch (preset) {
+      case 'linear':
+        inHandle = new THREE.Vector3(-0.33, 0, 0);
+        outHandle = new THREE.Vector3(0.33, 0, 0);
+        kf.interpolation = 'linear';
+        break;
+      case 'easeIn':
+        inHandle = new THREE.Vector3(-0.33, 0, 0);
+        outHandle = new THREE.Vector3(0.33, 0.8, 0);
+        kf.interpolation = 'bezier';
+        break;
+      case 'easeOut':
+        inHandle = new THREE.Vector3(-0.33, -0.8, 0);
+        outHandle = new THREE.Vector3(0.33, 0, 0);
+        kf.interpolation = 'bezier';
+        break;
+      case 'easeInOut':
+        inHandle = new THREE.Vector3(-0.33, -0.8, 0);
+        outHandle = new THREE.Vector3(0.33, 0.8, 0);
+        kf.interpolation = 'bezier';
+        break;
+      case 'elastic':
+        inHandle = new THREE.Vector3(-0.5, -1.2, 0);
+        outHandle = new THREE.Vector3(0.5, 1.2, 0);
+        kf.interpolation = 'bezier';
+        break;
+      case 'step':
+        inHandle = new THREE.Vector3(-0.01, -1, 0);
+        outHandle = new THREE.Vector3(0.01, 1, 0);
+        kf.interpolation = 'bezier';
+        break;
+    }
+
+    kf.setBezierHandles(boneId, [inHandle, outHandle]);
+    markAnimDirty();
+  }
+
+  function applyPresetToSelectedFrames(
+    boneId: string,
+    preset: CurvePresetType,
+    frames: number[]
+  ): void {
+    frames.forEach((frame) => {
+      applyCurvePreset(frame, boneId, preset);
+    });
+  }
+
+  function batchScaleKeyframes(
+    boneId: string,
+    frames: number[],
+    scaleFactor: number,
+    centerFrame?: number,
+    centerValue?: number
+  ): void {
+    if (!currentClip.value || frames.length === 0) return;
+
+    const sortedFrames = [...frames].sort((a, b) => a - b);
+    const cf = centerFrame ?? (sortedFrames[0] + sortedFrames[sortedFrames.length - 1]) / 2;
+
+    let values: number[] = [];
+    sortedFrames.forEach((frame) => {
+      const kf = currentClip.value!.getKeyframeAt(frame);
+      if (kf) {
+        const rot = kf.getBoneRotation(boneId);
+        if (rot) {
+          const rotArr = [rot.x, rot.y, rot.z];
+          rotArr.forEach((v, i) => {
+            values.push(v);
+          });
+        }
+      }
+    });
+
+    const cv = centerValue ?? (values.reduce((a, b) => a + b, 0) / (values.length || 1));
+
+    sortedFrames.forEach((frame) => {
+      const kf = currentClip.value!.getKeyframeAt(frame);
+      if (kf) {
+        const rot = kf.getBoneRotation(boneId);
+        if (rot) {
+          const newRot = rot.clone();
+          (['x', 'y', 'z'] as const).forEach((axis) => {
+            newRot[axis] = cv + (newRot[axis] - cv) * scaleFactor;
+          });
+          kf.setBoneRotation(boneId, newRot);
+        }
+      }
+    });
+
+    markAnimDirty();
+  }
+
+  function batchMoveKeyframes(
+    boneId: string,
+    frames: number[],
+    frameDelta: number,
+    valueDelta: THREE.Vector3
+  ): void {
+    if (!currentClip.value || frames.length === 0) return;
+
+    const sortedFrames = [...frames].sort((a, b) => b - a);
+    const actualDelta = Math.round(frameDelta);
+
+    sortedFrames.forEach((frame) => {
+      const newFrame = Math.max(0, frame + actualDelta);
+      if (newFrame !== frame && !currentClip.value!.getKeyframeAt(newFrame)) {
+        const kf = currentClip.value!.getKeyframeAt(frame);
+        if (kf) {
+          const rot = kf.getBoneRotation(boneId);
+          if (rot) {
+            const newRot = rot.clone();
+            newRot.x += valueDelta.x;
+            newRot.y += valueDelta.y;
+            newRot.z += valueDelta.z;
+            kf.setBoneRotation(boneId, newRot);
+          }
+          currentClip.value!.moveKeyframe(frame, newFrame);
+
+          if (curveEditorSelectedKeyframes.value.has(frame)) {
+            curveEditorSelectedKeyframes.value.delete(frame);
+            curveEditorSelectedKeyframes.value.add(newFrame);
+          }
+          if (selectedKeyframe.value === frame) {
+            selectedKeyframe.value = newFrame;
+          }
+        }
+      } else {
+        const kf = currentClip.value!.getKeyframeAt(frame);
+        if (kf) {
+          const rot = kf.getBoneRotation(boneId);
+          if (rot) {
+            const newRot = rot.clone();
+            newRot.x += valueDelta.x;
+            newRot.y += valueDelta.y;
+            newRot.z += valueDelta.z;
+            kf.setBoneRotation(boneId, newRot);
+          }
+        }
+      }
+    });
+
+    markAnimDirty();
+  }
+
+  function setCurveEditorSelectedKeyframes(frames: Set<number> | number[]) {
+    if (Array.isArray(frames)) {
+      curveEditorSelectedKeyframes.value = new Set(frames);
+    } else {
+      curveEditorSelectedKeyframes.value = new Set(frames);
+    }
+  }
+
+  function addCurveEditorSelectedKeyframe(frame: number) {
+    curveEditorSelectedKeyframes.value.add(frame);
+  }
+
+  function clearCurveEditorSelectedKeyframes() {
+    curveEditorSelectedKeyframes.value.clear();
+  }
+
+  function removeKeyframeFromCurveEditorSelection(frame: number) {
+    curveEditorSelectedKeyframes.value.delete(frame);
+  }
+
+  function setSelectedKeyframe(frame: number | null) {
+    selectedKeyframe.value = frame;
+  }
+
   init();
 
   watch(() => skeletonStore.skeleton, (newSkeleton) => {
@@ -330,6 +545,7 @@ export const useAnimationStore = defineStore('animation', () => {
     useStateMachine,
     copiedKeyframe,
     selectedKeyframe,
+    curveEditorSelectedKeyframes,
     init,
     createClip,
     duplicateClip,
@@ -350,6 +566,7 @@ export const useAnimationStore = defineStore('animation', () => {
     copyKeyframe,
     pasteKeyframe,
     setKeyframeInterpolation,
+    applyCurrentPose,
     update,
     initStateMachine,
     addState,
@@ -366,5 +583,16 @@ export const useAnimationStore = defineStore('animation', () => {
     setActiveClipId,
     loadFromStorage,
     resetAnimator,
+    setBezierHandle,
+    getBezierHandles,
+    applyCurvePreset,
+    applyPresetToSelectedFrames,
+    batchScaleKeyframes,
+    batchMoveKeyframes,
+    setCurveEditorSelectedKeyframes,
+    addCurveEditorSelectedKeyframe,
+    clearCurveEditorSelectedKeyframes,
+    removeKeyframeFromCurveEditorSelection,
+    setSelectedKeyframe,
   };
 });
