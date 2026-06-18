@@ -14,6 +14,8 @@ import type {
   ConditionNodeConfig,
   AdditiveNodeConfig,
   TransitionNodeConfig,
+  NodeEvaluationResult,
+  BlueprintEvaluationResult,
 } from '@/types';
 import type { AnimationClip } from '../animation/AnimationClip';
 import { generateId } from '@/utils/math';
@@ -348,11 +350,28 @@ export class BlueprintGraph {
     clips: Map<string, AnimationClip>,
     boneIds: string[]
   ): BonePoseMap {
+    const result = this.evaluateDetailed(ctx, clips, boneIds);
+    return result.finalPose as BonePoseMap;
+  }
+
+  evaluateDetailed(
+    ctx: BlueprintEvaluationContext,
+    clips: Map<string, AnimationClip>,
+    boneIds: string[]
+  ): BlueprintEvaluationResult {
+    const startTime = performance.now();
     const outputs = new Map<string, Map<string, any>>();
+    const nodeResults = new Map<string, NodeEvaluationResult>();
     const errors = this.validate();
 
     if (errors.length > 0) {
-      return PoseBlender.emptyPose();
+      return {
+        finalPose: PoseBlender.emptyPose() as Map<string, any>,
+        nodeResults,
+        evaluationOrder: [],
+        totalEvaluationTimeMs: performance.now() - startTime,
+        activeConnectionCount: this.connections.size,
+      };
     }
 
     const order = this.topologicalSort();
@@ -361,22 +380,114 @@ export class BlueprintGraph {
       const node = this.nodes.get(nodeId);
       if (!node) continue;
 
+      const nodeStart = performance.now();
       const nodeOutputs = this.evaluateNode(node, ctx, clips, boneIds, outputs);
+      const nodeTimeUs = (performance.now() - nodeStart) * 1000;
       outputs.set(nodeId, nodeOutputs);
+      nodeResults.set(nodeId, {
+        nodeId,
+        outputs: nodeOutputs,
+        evaluationTimeUs: nodeTimeUs,
+      });
     }
 
     const outputNode = Array.from(this.nodes.values()).find((n) => n.type === 'output');
-    if (!outputNode) return PoseBlender.emptyPose();
+    if (!outputNode) {
+      return {
+        finalPose: PoseBlender.emptyPose() as Map<string, any>,
+        nodeResults,
+        evaluationOrder: order,
+        totalEvaluationTimeMs: performance.now() - startTime,
+        activeConnectionCount: this.connections.size,
+      };
+    }
 
     const inputConn = Array.from(this.connections.values()).find(
       (c) => c.toNodeId === outputNode.id && c.toPortId === 'pose'
     );
-    if (!inputConn) return PoseBlender.emptyPose();
+    if (!inputConn) {
+      return {
+        finalPose: PoseBlender.emptyPose() as Map<string, any>,
+        nodeResults,
+        evaluationOrder: order,
+        totalEvaluationTimeMs: performance.now() - startTime,
+        activeConnectionCount: this.connections.size,
+      };
+    }
 
     const fromOutputs = outputs.get(inputConn.fromNodeId);
-    if (!fromOutputs) return PoseBlender.emptyPose();
+    const finalPose = fromOutputs?.get('pose') || PoseBlender.emptyPose();
 
-    return fromOutputs.get('pose') || PoseBlender.emptyPose();
+    return {
+      finalPose: finalPose as Map<string, any>,
+      nodeResults,
+      evaluationOrder: order,
+      totalEvaluationTimeMs: performance.now() - startTime,
+      activeConnectionCount: this.connections.size,
+    };
+  }
+
+  evaluateWithBreakpoints(
+    ctx: BlueprintEvaluationContext,
+    clips: Map<string, AnimationClip>,
+    boneIds: string[],
+    breakpoints: Set<string>,
+    currentEvalIndex: number,
+    previousOutputs: Map<string, Map<string, any>> | null
+  ): {
+    outputs: Map<string, Map<string, any>>;
+    nodeResults: Map<string, NodeEvaluationResult>;
+    evaluationOrder: string[];
+    pausedAtNodeId: string | null;
+    currentEvalIndex: number;
+  } {
+    const errors = this.validate();
+    if (errors.length > 0) {
+      return {
+        outputs: new Map(),
+        nodeResults: new Map(),
+        evaluationOrder: [],
+        pausedAtNodeId: null,
+        currentEvalIndex: 0,
+      };
+    }
+
+    const order = this.topologicalSort();
+    const outputs = previousOutputs ? new Map(previousOutputs) : new Map<string, Map<string, any>>();
+    const nodeResults = new Map<string, NodeEvaluationResult>();
+    let pausedAtNodeId: string | null = null;
+    let newEvalIndex = currentEvalIndex;
+
+    for (let i = currentEvalIndex; i < order.length; i++) {
+      const nodeId = order[i];
+      const node = this.nodes.get(nodeId);
+      if (!node) continue;
+
+      const nodeStart = performance.now();
+      const nodeOutputs = this.evaluateNode(node, ctx, clips, boneIds, outputs);
+      const nodeTimeUs = (performance.now() - nodeStart) * 1000;
+      outputs.set(nodeId, nodeOutputs);
+      nodeResults.set(nodeId, {
+        nodeId,
+        outputs: nodeOutputs,
+        evaluationTimeUs: nodeTimeUs,
+      });
+
+      newEvalIndex = i + 1;
+
+      if (breakpoints.has(nodeId) && node.type !== 'output') {
+        pausedAtNodeId = nodeId;
+        break;
+      }
+    }
+
+    return {
+      outputs,
+      nodeResults,
+      evaluationOrder: order,
+      pausedAtNodeId,
+      currentEvalIndex: newEvalIndex,
+    };
   }
 
   private evaluateNode(

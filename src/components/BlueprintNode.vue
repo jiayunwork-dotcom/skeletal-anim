@@ -5,14 +5,23 @@
     :class="{
       'ring-2 ring-accent-primary': selected,
       'ring-2 ring-red-500': hasError && !selected,
+      'ring-2 ring-orange-500': isSlowNode && !selected && !hasError,
+      'node-breakpoint-paused': isPausedHere,
     }"
     @mousedown="$emit('mousedown-node', $event)"
     @contextmenu.prevent="$emit('contextmenu-node', $event, node.id)"
   >
+    <div v-if="hasBreakpoint" class="breakpoint-marker" title="断点">
+      <span class="breakpoint-dot"></span>
+    </div>
+
     <div class="node-header" :class="headerClass">
       <span class="node-icon">{{ nodeIcon }}</span>
       <span class="node-title">{{ nodeTitle }}</span>
       <span v-if="hasError" class="ml-auto text-red-400" title="存在错误">⚠️</span>
+      <span v-if="evalTimeUs > 0" class="node-perf" :class="perfTimeClass" :title="`评估耗时: ${evalTimeUs.toFixed(0)}μs`">
+        {{ evalTimeDisplay }}
+      </span>
     </div>
 
     <div class="node-body">
@@ -161,13 +170,30 @@
         <span class="port-label output-label">{{ port.name }}</span>
         <span class="port-dot" :class="portColorClass(port.type)"></span>
       </div>
+
+      <div
+        v-for="(port, idx) in outputPorts"
+        :key="'thumb-' + port.id"
+        class="pose-thumb-container absolute"
+        :style="thumbnailStyle(idx)"
+      >
+        <PoseThumbnail
+          v-if="showThumbnails && port.type === 'pose'"
+          :pose-data="outputPoseData"
+          :width="40"
+          :height="60"
+        />
+      </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed } from 'vue';
+import * as THREE from 'three';
 import { getNodePorts } from '@/core/blueprint/BlueprintGraph';
+import { useBlueprintStore } from '@/stores/useBlueprintStore';
+import PoseThumbnail from './PoseThumbnail.vue';
 import type { BlueprintNodeData, BlueprintPort, PortType, AnimationSourceNodeConfig, BlendNodeConfig, ConditionNodeConfig, AdditiveNodeConfig, TransitionNodeConfig } from '@/types';
 import type { AnimationClip } from '@/core/animation/AnimationClip';
 
@@ -178,6 +204,7 @@ const props = defineProps<{
   highlightPorts: { inputs: string[]; outputs: string[] } | null;
   allClips: AnimationClip[];
   boneNames: Record<string, string>;
+  showThumbnails: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -187,6 +214,8 @@ const emit = defineEmits<{
   (e: 'port-mouseup', data: { nodeId: string; portId: string; port: BlueprintPort }): void;
   (e: 'config-change', data: { nodeId: string; config: any }): void;
 }>();
+
+const blueprintStore = useBlueprintStore();
 
 const NODE_WIDTH = 180;
 const PORT_OFFSET_Y = 28;
@@ -211,6 +240,36 @@ const cfg = computed(() => {
     default:
       return {} as any;
   }
+});
+
+const hasBreakpoint = computed(() => blueprintStore.hasBreakpoint(props.node.id));
+
+const isPausedHere = computed(() => blueprintStore.isPaused && blueprintStore.pausedAtNodeId === props.node.id);
+
+const nodeResult = computed(() => blueprintStore.nodeResults.get(props.node.id));
+
+const evalTimeUs = computed(() => nodeResult.value?.evaluationTimeUs || 0);
+
+const isSlowNode = computed(() => evalTimeUs.value > 500);
+
+const evalTimeDisplay = computed(() => {
+  const us = evalTimeUs.value;
+  if (us <= 0) return '';
+  if (us < 1000) return `${us.toFixed(0)}μs`;
+  return `${(us / 1000).toFixed(1)}ms`;
+});
+
+const perfTimeClass = computed(() => {
+  if (evalTimeUs.value > 500) return 'text-orange-400';
+  if (evalTimeUs.value > 100) return 'text-yellow-400';
+  return 'text-green-400';
+});
+
+const outputPoseData = computed((): Map<string, THREE.Euler> | null => {
+  if (!nodeResult.value) return null;
+  const poseOutput = nodeResult.value.outputs.get('pose');
+  if (poseOutput instanceof Map) return poseOutput;
+  return null;
 });
 
 const nodeStyle = computed(() => ({
@@ -267,6 +326,13 @@ const currentClip = computed(() => {
   if (props.node.type !== 'animationSource') return null;
   return props.allClips.find((c) => c.id === cfg.value.clipId) || null;
 });
+
+function thumbnailStyle(idx: number) {
+  return {
+    right: '-52px',
+    top: (PORT_OFFSET_Y + idx * PORT_ROW_HEIGHT - 8) + 'px',
+  };
+}
 
 function getPortTop(index: number): number {
   return PORT_OFFSET_Y + index * PORT_ROW_HEIGHT;
@@ -337,8 +403,48 @@ function toggleBoneMask(boneId: string, enabled: boolean) {
   flex: 1;
 }
 
+.node-perf {
+  font-size: 9px;
+  font-family: monospace;
+  margin-left: auto;
+  padding: 1px 4px;
+  border-radius: 3px;
+  background: rgba(0, 0, 0, 0.3);
+}
+
 .node-body {
   padding: 10px;
+}
+
+.breakpoint-marker {
+  position: absolute;
+  top: -4px;
+  left: -4px;
+  z-index: 10;
+}
+
+.breakpoint-dot {
+  display: block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #ef4444;
+  border: 2px solid #1e1e2e;
+  box-shadow: 0 0 4px rgba(239, 68, 68, 0.6);
+}
+
+.node-breakpoint-paused {
+  animation: breakpoint-pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes breakpoint-pulse {
+  0%, 100% {
+    box-shadow: 0 0 8px rgba(239, 68, 68, 0.3), 0 4px 12px rgba(0, 0, 0, 0.4);
+  }
+  50% {
+    box-shadow: 0 0 20px rgba(239, 68, 68, 0.7), 0 4px 12px rgba(0, 0, 0, 0.4);
+    border-color: rgba(239, 68, 68, 0.5);
+  }
 }
 
 .port {
@@ -391,6 +497,11 @@ function toggleBoneMask(boneId: string, enabled: boolean) {
 @keyframes pulse-port {
   0%, 100% { transform: scale(1); }
   50% { transform: scale(1.4); }
+}
+
+.pose-thumb-container {
+  pointer-events: none;
+  z-index: 5;
 }
 
 .progress-bar-container {

@@ -85,3 +85,52 @@ export interface BlueprintEvaluationContext {
   deltaTime: number;
   skeletonBoneIds: string[];
 }
+
+export interface NodeEvaluationResult {
+  nodeId: string;
+  outputs: Map<string, any>;
+  evaluationTimeUs: number;
+}
+
+export interface BlueprintEvaluationResult {
+  finalPose: Map<string, any>;
+  nodeResults: Map<string, NodeEvaluationResult>;
+  evaluationOrder: string[];
+  totalEvaluationTimeMs: number;
+  activeConnectionCount: number;
+}
+
+export interface BlueprintPerformanceFrame {
+  timestamp: number;
+  evaluationTimeMs: number;
+  nodeCount: number;
+  activeConnectionCount: number;
+  evaluationOrder: string[];
+  nodeTimings: Map<string, number>;
+}
+
+export type BlueprintUndoActionType =
+  | 'addNode'
+  | 'removeNode'
+  | 'moveNode'
+  | 'addConnection'
+  | 'removeConnection'
+  | 'setNodeConfig'
+  | 'setParameter'
+  | 'disconnectNode';
+
+export interface BlueprintUndoAction {
+  type: BlueprintUndoActionType;
+  timestamp: number;
+  before: BlueprintGraphData;
+  after: BlueprintGraphData;
+}
+
+export interface BlueprintBreakpointState {
+  breakpoints: Set<string>;
+  pausedAtNodeId: string | null;
+  isPaused: boolean;
+  evaluationOrder: string[];
+  currentEvalIndex: number;
+  nodeResults: Map<string, NodeEvaluationResult>;
+}

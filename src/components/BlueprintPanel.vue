@@ -10,116 +10,192 @@
           <input type="checkbox" v-model="useBlueprint" @change="onToggleBlueprint" />
           启用
         </label>
+        <label class="toggle-label flex items-center gap-1 text-xs text-gray-400 cursor-pointer">
+          <input type="checkbox" v-model="showThumbnails" />
+          缩略图
+        </label>
+        <button
+          class="btn-icon text-xs"
+          @click="blueprintStore.undo()"
+          :disabled="!blueprintStore.canUndo()"
+          title="撤销 (Ctrl+Z)"
+        >
+          ↩
+        </button>
+        <button
+          class="btn-icon text-xs"
+          @click="blueprintStore.redo()"
+          :disabled="!blueprintStore.canRedo()"
+          title="重做 (Ctrl+Y)"
+        >
+          ↪
+        </button>
         <button class="btn-icon text-xs" @click="resetView" title="重置视图">
           <Focus class="w-3.5 h-3.5" />
         </button>
       </div>
     </div>
 
-    <div
-      ref="canvasContainerRef"
-      class="flex-1 relative overflow-hidden bg-dark-950 cursor-grab active:cursor-grabbing"
-      @mousedown="onCanvasMouseDown"
-      @wheel="onCanvasWheel"
-      @dblclick="onCanvasDblClick"
-      @contextmenu.prevent="onCanvasContextMenu"
-    >
+    <div class="flex-1 flex relative overflow-hidden">
       <div
-        class="absolute inset-0 opacity-30"
-        :style="gridStyle"
-      ></div>
-
-      <svg
-        class="absolute inset-0 w-full h-full pointer-events-none"
-        style="z-index: 1"
+        ref="canvasContainerRef"
+        class="flex-1 relative overflow-hidden bg-dark-950 cursor-grab active:cursor-grabbing"
+        @mousedown="onCanvasMouseDown"
+        @wheel="onCanvasWheel"
+        @dblclick="onCanvasDblClick"
+        @contextmenu.prevent="onCanvasContextMenu"
       >
-        <defs>
-          <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
-            <polygon points="0 0, 10 3.5, 0 7" fill="#6366f1" />
-          </marker>
-        </defs>
-        <path
-          v-for="conn in connections"
-          :key="conn.id"
-          :d="getConnectionPath(conn)"
-          stroke="#6366f1"
-          stroke-width="2"
-          fill="none"
-          class="pointer-events-auto cursor-pointer transition-all hover:stroke-accent-primary"
-          style="z-index: 2"
-          @contextmenu.prevent.stop="onConnectionContextMenu($event, conn.id)"
-          @click.stop="onConnectionClick(conn.id)"
-        />
-        <path
-          v-if="draggingConnection"
-          :d="getDraggingConnectionPath()"
-          stroke="#a855f7"
-          stroke-width="2"
-          stroke-dasharray="5,5"
-          fill="none"
-        />
-      </svg>
+        <div
+          class="absolute inset-0 opacity-30"
+          :style="gridStyle"
+        ></div>
 
-      <div
-        class="absolute origin-top-left"
-        :style="transformStyle"
-        style="z-index: 3"
-      >
-        <BlueprintNode
-          v-for="node in nodes"
-          :key="node.id"
-          :node="node"
-          :selected="selectedNodeId === node.id"
-          :has-error="hasNodeError(node.id)"
-          :highlight-ports="highlightPortsFor(node.id)"
-          :all-clips="allClips"
-          :bone-names="boneNames"
-          @mousedown-node="onNodeMouseDown($event, node.id)"
-          @port-mousedown="onPortMouseDown"
-          @port-mouseup="onPortMouseUp"
-          @contextmenu-node="onNodeContextMenu"
-          @config-change="onNodeConfigChange"
-        />
+        <svg
+          ref="svgRef"
+          class="absolute inset-0 w-full h-full pointer-events-none"
+          style="z-index: 1"
+        >
+          <defs>
+            <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+              <polygon points="0 0, 10 3.5, 0 7" fill="#6366f1" />
+            </marker>
+          </defs>
+
+          <g v-for="conn in connections" :key="conn.id">
+            <path
+              :d="getConnectionPath(conn)"
+              :stroke="getConnectionColor(conn)"
+              :stroke-width="2"
+              :stroke-dasharray="hasConnectionError(conn) ? '5,5' : 'none'"
+              fill="none"
+              class="pointer-events-auto cursor-pointer transition-all hover:stroke-accent-primary"
+              style="z-index: 2"
+              @contextmenu.prevent.stop="onConnectionContextMenu($event, conn.id)"
+              @click.stop="onConnectionClick(conn.id)"
+            />
+            <circle
+              v-if="!hasConnectionError(conn) && useBlueprint && flowParticles[conn.id]"
+              :r="3"
+              :fill="getParticleColor(conn)"
+              class="flow-particle"
+            >
+              <animateMotion
+                :path="getConnectionPath(conn)"
+                :dur="getParticleSpeed(conn)"
+                repeatCount="indefinite"
+              />
+            </circle>
+            <circle
+              v-if="!hasConnectionError(conn) && useBlueprint && flowParticles[conn.id]"
+              :r="2"
+              :fill="getParticleColor(conn)"
+              opacity="0.5"
+              class="flow-particle"
+            >
+              <animateMotion
+                :path="getConnectionPath(conn)"
+                :dur="getParticleSpeed(conn)"
+                begin="0.3s"
+                repeatCount="indefinite"
+              />
+            </circle>
+            <circle
+              v-if="!hasConnectionError(conn) && useBlueprint && flowParticles[conn.id]"
+              :r="2.5"
+              :fill="getParticleColor(conn)"
+              opacity="0.3"
+              class="flow-particle"
+            >
+              <animateMotion
+                :path="getConnectionPath(conn)"
+                :dur="getParticleSpeed(conn)"
+                begin="0.6s"
+                repeatCount="indefinite"
+              />
+            </circle>
+          </g>
+
+          <path
+            v-if="draggingConnection"
+            :d="getDraggingConnectionPath()"
+            stroke="#a855f7"
+            stroke-width="2"
+            stroke-dasharray="5,5"
+            fill="none"
+          />
+        </svg>
+
+        <div
+          class="absolute origin-top-left"
+          :style="transformStyle"
+          style="z-index: 3"
+        >
+          <BlueprintNode
+            v-for="node in nodes"
+            :key="node.id"
+            :node="node"
+            :selected="selectedNodeId === node.id"
+            :has-error="hasNodeError(node.id)"
+            :highlight-ports="highlightPortsFor(node.id)"
+            :all-clips="allClips"
+            :bone-names="boneNames"
+            :show-thumbnails="showThumbnails && useBlueprint"
+            @mousedown-node="onNodeMouseDown($event, node.id)"
+            @port-mousedown="onPortMouseDown"
+            @port-mouseup="onPortMouseUp"
+            @contextmenu-node="onNodeContextMenu"
+            @config-change="onNodeConfigChange"
+          />
+        </div>
+
+        <div
+          v-if="showCreateMenu"
+          class="context-menu"
+          :style="{ left: createMenuPos.x + 'px', top: createMenuPos.y + 'px' }"
+        >
+          <div class="context-menu-item" @click="createNode('animationSource')">
+            <span>🎬</span> 动画源节点
+          </div>
+          <div class="context-menu-item" @click="createNode('blend')">
+            <span>🔀</span> 混合节点
+          </div>
+          <div class="context-menu-item" @click="createNode('condition')">
+            <span>❓</span> 条件分支节点
+          </div>
+          <div class="context-menu-item" @click="createNode('additive')">
+            <span>➕</span> 加法混合节点
+          </div>
+          <div class="context-menu-item" @click="createNode('transition')">
+            <span>🔄</span> 状态过渡节点
+          </div>
+        </div>
+
+        <div
+          v-if="showNodeContextMenu"
+          class="context-menu"
+          :style="{ left: nodeContextMenuPos.x + 'px', top: nodeContextMenuPos.y + 'px' }"
+        >
+          <div class="context-menu-item" @click="duplicateSelectedNode">
+            <span>📋</span> 复制节点
+          </div>
+          <div class="context-menu-item" @click="disconnectSelectedNode">
+            <span>🔌</span> 断开连接
+          </div>
+          <div class="context-menu-item" @click="toggleBreakpointOnNode">
+            <span>🔴</span> {{ isBreakpointSet ? '移除断点' : '设置断点' }}
+          </div>
+          <div class="context-menu-divider"></div>
+          <div class="context-menu-item text-red-400 hover:text-red-300" @click="deleteSelectedNode" v-if="canDeleteSelected">
+            <span>🗑️</span> 删除节点
+          </div>
+        </div>
       </div>
 
-      <div
-        v-if="showCreateMenu"
-        class="context-menu"
-        :style="{ left: createMenuPos.x + 'px', top: createMenuPos.y + 'px' }"
-      >
-        <div class="context-menu-item" @click="createNode('animationSource')">
-          <span>🎬</span> 动画源节点
-        </div>
-        <div class="context-menu-item" @click="createNode('blend')">
-          <span>🔀</span> 混合节点
-        </div>
-        <div class="context-menu-item" @click="createNode('condition')">
-          <span>❓</span> 条件分支节点
-        </div>
-        <div class="context-menu-item" @click="createNode('additive')">
-          <span>➕</span> 加法混合节点
-        </div>
-        <div class="context-menu-item" @click="createNode('transition')">
-          <span>🔄</span> 状态过渡节点
-        </div>
-      </div>
-
-      <div
-        v-if="showNodeContextMenu"
-        class="context-menu"
-        :style="{ left: nodeContextMenuPos.x + 'px', top: nodeContextMenuPos.y + 'px' }"
-      >
-        <div class="context-menu-item" @click="duplicateSelectedNode">
-          <span>📋</span> 复制节点
-        </div>
-        <div class="context-menu-item" @click="disconnectSelectedNode">
-          <span>🔌</span> 断开连接
-        </div>
-        <div class="context-menu-divider"></div>
-        <div class="context-menu-item text-red-400 hover:text-red-300" @click="deleteSelectedNode" v-if="canDeleteSelected">
-          <span>🗑️</span> 删除节点
-        </div>
-      </div>
+      <BreakpointInspector
+        v-if="blueprintStore.isPaused"
+        @step="onBreakpointStep"
+        @continue="onBreakpointContinue"
+      />
     </div>
 
     <div v-if="Object.keys(parameters).length > 0" class="shrink-0 border-t border-dark-600 p-2 bg-dark-800">
@@ -147,6 +223,22 @@
         <button @click="addParameter" class="text-xs text-accent-primary hover:text-accent-primary/80 px-2 py-1">+ 新参数</button>
       </div>
     </div>
+
+    <BlueprintProfiler
+      :collapsed="!showProfilerPanel"
+      @toggle="showProfilerPanel = !showProfilerPanel"
+    />
+
+    <div
+      v-if="blueprintStore.isPaused"
+      class="shrink-0 border-t border-red-500/30 bg-red-900/20 px-3 py-1.5 flex items-center gap-3"
+    >
+      <span class="text-xs text-red-400 font-medium">⏸ 已暂停于断点</span>
+      <div class="flex gap-2 ml-auto">
+        <button class="btn btn-xs" @click="onBreakpointStep">⏭ 单步</button>
+        <button class="btn btn-xs btn-primary" @click="onBreakpointContinue">▶ 继续</button>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -154,6 +246,8 @@
 import { ref, computed, reactive, onMounted, onUnmounted } from 'vue';
 import { Focus } from 'lucide-vue-next';
 import BlueprintNode from './BlueprintNode.vue';
+import BlueprintProfiler from './BlueprintProfiler.vue';
+import BreakpointInspector from './BreakpointInspector.vue';
 import { useBlueprintStore } from '@/stores/useBlueprintStore';
 import { useAnimationStore } from '@/stores/useAnimationStore';
 import { useSkeletonStore } from '@/stores/useSkeletonStore';
@@ -165,6 +259,7 @@ const animationStore = useAnimationStore();
 const skeletonStore = useSkeletonStore();
 
 const canvasContainerRef = ref<HTMLDivElement | null>(null);
+const svgRef = ref<SVGSVGElement | null>(null);
 const nodes = computed(() => blueprintStore.nodes);
 const connections = computed(() => blueprintStore.connections);
 const selectedNodeId = computed(() => blueprintStore.selectedNodeId);
@@ -183,6 +278,18 @@ const boneNames = computed(() => {
 });
 
 const validationErrors = computed(() => blueprintStore.validationErrors);
+const showThumbnails = ref(true);
+const showProfilerPanel = ref(false);
+
+const flowParticles = computed(() => {
+  const map: Record<string, boolean> = {};
+  if (useBlueprint.value) {
+    connections.value.forEach((conn) => {
+      map[conn.id] = true;
+    });
+  }
+  return map;
+});
 
 const canvasOffset = reactive({ x: 0, y: 0 });
 const canvasScale = ref(1);
@@ -192,6 +299,7 @@ const panStart = reactive({ x: 0, y: 0, offsetX: 0, offsetY: 0 });
 const isDraggingNode = ref(false);
 const dragNodeId = ref<string | null>(null);
 const dragNodeStart = reactive({ x: 0, y: 0, nodeX: 0, nodeY: 0 });
+const dragNodeStartPos = reactive({ x: 0, y: 0 });
 
 const draggingConnection = ref<{
   fromNodeId: string;
@@ -235,22 +343,55 @@ const canDeleteSelected = computed(() => {
   return node?.type !== 'output';
 });
 
+const isBreakpointSet = computed(() => {
+  return contextMenuNodeId.value ? blueprintStore.hasBreakpoint(contextMenuNodeId.value) : false;
+});
+
 function hasNodeError(nodeId: string): boolean {
   return validationErrors.value.some((e) => e.nodeId === nodeId || (e.errorType === 'loop' && e.nodeId === ''));
 }
 
-function highlightPortsFor(nodeId: string): { inputs: string[]; outputs: string[] } | null {
-  if (!draggingConnection.value) return null;
-  const fromPort = draggingConnection.value.fromPort;
-  const node = blueprintStore.graph.nodes.get(nodeId);
-  if (!node) return null;
+function hasConnectionError(conn: BlueprintConnectionData): boolean {
+  return validationErrors.value.some((e) => e.errorType === 'loop') ||
+    validationErrors.value.some((e) => e.errorType === 'unconnected' && e.nodeId === conn.toNodeId);
+}
 
-  const ports = getNodePorts(node.type);
-  const compatibleInputs = ports.inputs
-    .filter((p) => p.type === fromPort.type)
-    .map((p) => p.id);
+function getConnectionColor(conn: BlueprintConnectionData): string {
+  if (hasConnectionError(conn)) return '#ef4444';
 
-  return { inputs: compatibleInputs, outputs: [] };
+  const fromNode = blueprintStore.graph.nodes.get(conn.fromNodeId);
+  if (!fromNode) return '#6366f1';
+
+  const fromPorts = getNodePorts(fromNode.type);
+  const port = fromPorts.outputs.find((p) => p.id === conn.fromPortId);
+  if (!port) return '#6366f1';
+
+  switch (port.type) {
+    case 'pose': return '#60a5fa';
+    case 'boolean': return '#facc15';
+    case 'number': return '#4ade80';
+    default: return '#6366f1';
+  }
+}
+
+function getParticleColor(conn: BlueprintConnectionData): string {
+  const fromNode = blueprintStore.graph.nodes.get(conn.fromNodeId);
+  if (!fromNode) return '#6366f1';
+
+  const fromPorts = getNodePorts(fromNode.type);
+  const port = fromPorts.outputs.find((p) => p.id === conn.fromPortId);
+  if (!port) return '#6366f1';
+
+  switch (port.type) {
+    case 'pose': return '#60a5fa';
+    case 'boolean': return '#facc15';
+    case 'number': return '#4ade80';
+    default: return '#6366f1';
+  }
+}
+
+function getParticleSpeed(_conn: BlueprintConnectionData): string {
+  return '2s';
 }
 
 function onToggleBlueprint() {
@@ -381,6 +522,8 @@ function onNodeMouseDown(e: MouseEvent, nodeId: string) {
   dragNodeStart.y = e.clientY;
   dragNodeStart.nodeX = node.position.x;
   dragNodeStart.nodeY = node.position.y;
+  dragNodeStartPos.x = node.position.x;
+  dragNodeStartPos.y = node.position.y;
 
   document.addEventListener('mousemove', onDocumentMouseMove);
   document.addEventListener('mouseup', onDocumentMouseUp);
@@ -427,7 +570,7 @@ function onDocumentMouseMove(e: MouseEvent) {
   if (isDraggingNode.value && dragNodeId.value) {
     const dx = (e.clientX - dragNodeStart.x) / canvasScale.value;
     const dy = (e.clientY - dragNodeStart.y) / canvasScale.value;
-    blueprintStore.moveNode(dragNodeId.value, {
+    blueprintStore.moveNodeNoUndo(dragNodeId.value, {
       x: dragNodeStart.nodeX + dx,
       y: dragNodeStart.nodeY + dy,
     });
@@ -440,6 +583,17 @@ function onDocumentMouseMove(e: MouseEvent) {
 }
 
 function onDocumentMouseUp() {
+  if (isDraggingNode.value && dragNodeId.value) {
+    const node = blueprintStore.graph.nodes.get(dragNodeId.value);
+    if (node) {
+      const dx = Math.abs(node.position.x - dragNodeStartPos.x);
+      const dy = Math.abs(node.position.y - dragNodeStartPos.y);
+      if (dx > 1 || dy > 1) {
+        blueprintStore.commitMoveUndo(dragNodeId.value, { x: dragNodeStartPos.x, y: dragNodeStartPos.y });
+      }
+    }
+  }
+
   isPanning.value = false;
   isDraggingNode.value = false;
   dragNodeId.value = null;
@@ -509,6 +663,21 @@ function disconnectSelectedNode() {
   hideAllMenus();
 }
 
+function toggleBreakpointOnNode() {
+  if (contextMenuNodeId.value) {
+    blueprintStore.toggleBreakpoint(contextMenuNodeId.value);
+  }
+  hideAllMenus();
+}
+
+function onBreakpointStep() {
+  blueprintStore.stepBreakpoint();
+}
+
+function onBreakpointContinue() {
+  blueprintStore.continueBreakpoint();
+}
+
 function onNodeConfigChange(data: { nodeId: string; config: any }) {
   blueprintStore.setNodeConfig(data.nodeId, data.config);
 }
@@ -541,12 +710,39 @@ function onGlobalClick(e: MouseEvent) {
   }
 }
 
+function onKeyDown(e: KeyboardEvent) {
+  if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
+    e.preventDefault();
+    blueprintStore.undo();
+  }
+  if ((e.ctrlKey || e.metaKey) && e.key === 'y') {
+    e.preventDefault();
+    blueprintStore.redo();
+  }
+}
+
+function highlightPortsFor(nodeId: string): { inputs: string[]; outputs: string[] } | null {
+  if (!draggingConnection.value) return null;
+  const fromPort = draggingConnection.value.fromPort;
+  const node = blueprintStore.graph.nodes.get(nodeId);
+  if (!node) return null;
+
+  const ports = getNodePorts(node.type);
+  const compatibleInputs = ports.inputs
+    .filter((p) => p.type === fromPort.type)
+    .map((p) => p.id);
+
+  return { inputs: compatibleInputs, outputs: [] };
+}
+
 onMounted(() => {
   document.addEventListener('click', onGlobalClick);
+  document.addEventListener('keydown', onKeyDown);
 });
 
 onUnmounted(() => {
   document.removeEventListener('click', onGlobalClick);
+  document.removeEventListener('keydown', onKeyDown);
   document.removeEventListener('mousemove', onDocumentMouseMove);
   document.removeEventListener('mouseup', onDocumentMouseUp);
 });
@@ -557,5 +753,9 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   gap: 6px;
+}
+
+.flow-particle {
+  pointer-events: none;
 }
 </style>
