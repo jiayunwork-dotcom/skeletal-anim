@@ -5,5 +5,7 @@ export { default as HierarchyPanel } from './HierarchyPanel.vue';
 export { default as PropertiesPanel } from './PropertiesPanel.vue';
 export { default as IkPanel } from './IkPanel.vue';
 export { default as StateMachinePanel } from './StateMachinePanel.vue';
+export { default as BlueprintPanel } from './BlueprintPanel.vue';
+export { default as BlueprintNode } from './BlueprintNode.vue';
 export { default as ImportDialog } from './ImportDialog.vue';
 export { default as ExportDialog } from './ExportDialog.vue';

@@ -6,6 +6,7 @@ import { AnimationClip } from '@/core/animation/AnimationClip';
 import { Keyframe } from '@/core/animation/Keyframe';
 import { StateMachine, State, Transition } from '@/core/animation/StateMachine';
 import { useSkeletonStore } from './useSkeletonStore';
+import { useBlueprintStore } from './useBlueprintStore';
 import { generateId } from '@/utils/math';
 import { DEFAULT_FPS } from '@/utils/constants';
 import type { AnimationClipData, KeyframeData, StateMachineData } from '@/types';
@@ -14,6 +15,7 @@ export type CurvePresetType = 'linear' | 'easeIn' | 'easeOut' | 'easeInOut' | 'e
 
 export const useAnimationStore = defineStore('animation', () => {
   const skeletonStore = useSkeletonStore();
+  const blueprintStore = useBlueprintStore();
   
   const animator = ref<Animator>(new Animator(skeletonStore.skeleton));
   const animVersion = ref(0);
@@ -23,6 +25,7 @@ export const useAnimationStore = defineStore('animation', () => {
   const copiedKeyframe = ref<Keyframe | null>(null);
   const selectedKeyframe = ref<number | null>(null);
   const curveEditorSelectedKeyframes = ref<Set<number>>(new Set());
+  const accumulatedTime = ref(0);
 
   function markAnimDirty() {
     animVersion.value++;
@@ -228,7 +231,15 @@ export const useAnimationStore = defineStore('animation', () => {
     animator.value.applyPose(currentFrame.value);
   }
 
-  function update() {
+  function update(deltaTime: number = 1 / 60) {
+    accumulatedTime.value += deltaTime;
+
+    if (blueprintStore.useBlueprint) {
+      blueprintStore.updateAndApply(accumulatedTime.value, deltaTime);
+      markAnimDirty();
+      return;
+    }
+
     if (useStateMachine.value && stateMachine.value) {
       stateMachine.value.update();
     } else {

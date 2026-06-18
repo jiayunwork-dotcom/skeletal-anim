@@ -5,12 +5,14 @@ import { GltfIO } from '@/core/io/GltfIO';
 import { BvhExporter } from '@/core/io/BvhExporter';
 import { useSkeletonStore } from './useSkeletonStore';
 import { useAnimationStore } from './useAnimationStore';
+import { useBlueprintStore } from './useBlueprintStore';
 import type { ProjectData, MeshData } from '@/types';
 import { Skeleton } from '@/core/skeleton/Skeleton';
 
 export const useProjectStore = defineStore('project', () => {
   const skeletonStore = useSkeletonStore();
   const animationStore = useAnimationStore();
+  const blueprintStore = useBlueprintStore();
 
   const projectName = ref('Untitled');
   const isDirty = ref(false);
@@ -43,6 +45,7 @@ export const useProjectStore = defineStore('project', () => {
   function newProject() {
     skeletonStore.loadHumanoidPreset();
     animationStore.init();
+    blueprintStore.init();
     projectName.value = 'Untitled';
     clearDirty();
   }
@@ -121,6 +124,7 @@ export const useProjectStore = defineStore('project', () => {
   function getProjectData(): ProjectData {
     const animData = animationStore.toData();
     const skelData = skeletonStore.toData();
+    const blueprintData = blueprintStore.toData();
     
     return {
       version: '1.0',
@@ -129,6 +133,7 @@ export const useProjectStore = defineStore('project', () => {
       mesh: skelData.mesh || undefined,
       animationClips: animData.clips,
       stateMachine: animData.stateMachine || undefined,
+      blueprint: blueprintData,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
@@ -148,6 +153,10 @@ export const useProjectStore = defineStore('project', () => {
     
     if (data.stateMachine) {
       animationStore.loadStateMachineData(data.stateMachine);
+    }
+    
+    if (data.blueprint) {
+      blueprintStore.loadData(data.blueprint);
     }
     
     clearDirty();

@@ -116,7 +116,7 @@ export function useAnimation() {
   }
 
   function updateAnimation(deltaTime: number) {
-    store.update();
+    store.update(deltaTime);
   }
 
   function enableStateMachine() {

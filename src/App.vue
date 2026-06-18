@@ -51,6 +51,7 @@
           <PropertiesPanel v-show="activeRightTab === 'properties'" />
           <IkPanel v-show="activeRightTab === 'ik'" />
           <StateMachinePanel v-show="activeRightTab === 'state'" />
+          <BlueprintPanel v-show="activeRightTab === 'blueprint'" />
         </div>
       </div>
 
@@ -122,6 +123,7 @@ import {
   PropertiesPanel,
   IkPanel,
   StateMachinePanel,
+  BlueprintPanel,
   ImportDialog,
   ExportDialog,
 } from './components';
@@ -137,7 +139,7 @@ const showRightPanel = ref(true);
 const showTimeline = ref(true);
 const rightPanelWidth = ref(280);
 const timelineHeight = ref(220);
-const activeRightTab = ref<'hierarchy' | 'properties' | 'ik' | 'state'>('hierarchy');
+const activeRightTab = ref<'hierarchy' | 'properties' | 'ik' | 'state' | 'blueprint'>('hierarchy');
 const statusMessage = ref('');
 
 const rightPanelTabs = [
@@ -145,6 +147,7 @@ const rightPanelTabs = [
   { id: 'properties' as const, label: '属性' },
   { id: 'ik' as const, label: 'IK' },
   { id: 'state' as const, label: '状态机' },
+  { id: 'blueprint' as const, label: '蓝图' },
 ];
 
 let resizingPanel: 'right' | 'bottom' | null = null;

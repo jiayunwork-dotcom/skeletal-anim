@@ -2,12 +2,14 @@ import { computed, ref } from 'vue';
 import { useProjectStore } from '@/stores/useProjectStore';
 import { useSkeletonStore } from '@/stores/useSkeletonStore';
 import { useAnimationStore } from '@/stores/useAnimationStore';
+import { useBlueprintStore } from '@/stores/useBlueprintStore';
 import type { ProjectData } from '@/types';
 
 export function useIO() {
   const projectStore = useProjectStore();
   const skeletonStore = useSkeletonStore();
   const animationStore = useAnimationStore();
+  const blueprintStore = useBlueprintStore();
 
   const projectName = computed(() => projectStore.projectName);
   const isDirty = computed(() => projectStore.isDirty);
@@ -84,6 +86,7 @@ export function useIO() {
 
   function downloadProject(): void {
     const animData = animationStore.toData();
+    const blueprintData = blueprintStore.toData();
     const projectData: ProjectData = {
       version: '1.0',
       name: projectStore.projectName,
@@ -91,6 +94,7 @@ export function useIO() {
       mesh: skeletonStore.toData().mesh,
       animationClips: animData.clips,
       stateMachine: animData.stateMachine,
+      blueprint: blueprintData,
       animation: {
         clips: animData.clips,
         stateMachine: animData.stateMachine,
@@ -140,6 +144,10 @@ export function useIO() {
         }
       }
 
+      if (data.blueprint) {
+        blueprintStore.loadData(data.blueprint);
+      }
+
       if (data.name) {
         projectStore.projectName = data.name;
       }
@@ -155,6 +163,7 @@ export function useIO() {
 
   function getProjectData(): ProjectData {
     const animData = animationStore.toData();
+    const blueprintData = blueprintStore.toData();
     return {
       version: '1.0',
       name: projectStore.projectName,
@@ -162,6 +171,7 @@ export function useIO() {
       mesh: skeletonStore.toData().mesh,
       animationClips: animData.clips,
       stateMachine: animData.stateMachine,
+      blueprint: blueprintData,
       animation: {
         clips: animData.clips,
         stateMachine: animData.stateMachine,

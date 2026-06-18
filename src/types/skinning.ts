@@ -30,6 +30,7 @@ export interface ProjectData {
   mesh?: MeshData;
   animationClips: import('./animation').AnimationClipData[];
   stateMachine?: import('./animation').StateMachineData;
+  blueprint?: import('./blueprint').BlueprintGraphData;
   animation?: {
     clips: import('./animation').AnimationClipData[];
     stateMachine?: import('./animation').StateMachineData;
